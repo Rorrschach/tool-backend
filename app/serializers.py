@@ -26,6 +26,8 @@ class AnnotationSerializer(serializers.Serializer):
     
     
 class ImageSerializer(serializers.ModelSerializer):
+    users = serializers.StringRelatedField(many=True)  # Serialize the users as a list of usernames
+
     class Meta:
         model = Image
-        fields = ['id', 'user', 'image', 'name']
+        fields = ['id', 'users', 'image', 'name']

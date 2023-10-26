@@ -68,19 +68,18 @@ def save_annotation(request):
 @api_view(['POST'])
 def upload_image(request):
     try:
-        # find the user by the token in the request header
+        # Find the user by the token in the request header
         token = request.META.get('HTTP_AUTHORIZATION').split()[1]
         user = Token.objects.get(key=token).user
 
-        # parse the image from the request
+        # Parse the image from the request
         parser_classes = (MultiPartParser, FormParser)
         image_file = request.data['file']
 
-        # get or create the Image instance
-        image, created = Image.objects.get_or_create(name=image_file.name,
-                                                     defaults={'image': image_file})
-        # add the user to the image's users
-        image.users.add(user)
+        # Get or create the Image instance and set the user
+        image, created = Image.objects.get_or_create(name=image_file.name, defaults={'image': image_file})
+        image.user = user  # Set the user for the image
+        image.save()
 
         return Response({'image': str(image)}, status=status.HTTP_201_CREATED)
     except KeyError:
