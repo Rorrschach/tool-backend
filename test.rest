@@ -12,7 +12,7 @@ POST http://localhost:8000/register/
 Content-Type: application/json
     
     {
-        "username": "ham",
+        "username": "hamlk",
         "password": "ham",
         "email": "admin@mail.com"
     }

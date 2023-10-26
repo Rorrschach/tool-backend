@@ -1,5 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
+from django.contrib.auth import authenticate, login, logout
 from .serializers import UserSerializer, ImageSerializer, LabelSerializer
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -7,49 +8,110 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
 from .models import Image, Label
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+
 import os
 
 
 
-@api_view(['POST'])
-def login(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
+# @api_view(['POST'])
+# def login(request):
+#     username = request.data.get('username')
+#     password = request.data.get('password')
     
-    if username is None or password is None:
-        return Response({'error': 'Please provide both username and password'},
-                        status=status.HTTP_400_BAD_REQUEST)
+#     if username is None or password is None:
+#         return Response({'error': 'Please provide both username and password'},
+#                         status=status.HTTP_400_BAD_REQUEST)
     
-    user = get_object_or_404(User, username=username)
+#     user = get_object_or_404(User, username=username)
     
-    if user.check_password(password):
-        token = Token.objects.get(user=user)
-        return Response({'token': token.key, 'user': UserSerializer(user).data})
-    else:
-        return Response({'error': 'Wrong password'}, status=status.HTTP_400_BAD_REQUEST)
+#     if user.check_password(password):
+#         token = Token.objects.get(user=user)
+#         return Response({'token': token.key, 'user': UserSerializer(user).data})
+#     else:
+#         return Response({'error': 'Wrong password'}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+# @api_view(['POST'])
+# def register(request):
+    
+#     serializer = UserSerializer(data=request.data)
+    
+#     if serializer.is_valid():
+#         user = User.objects.create(username=serializer.data['username'])
+#         user.set_password(serializer.data['password'])
+#         user.save()
+        
+#         token = Token.objects.create(user=user)
+        
+#         return Response({'token': token.key, 'user': serializer.data}, status=status.HTTP_201_CREATED)
+#     else:
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
 @api_view(['POST'])
+@csrf_exempt
+@permission_classes([AllowAny])
 def register(request):
-    
-    serializer = UserSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        user = User.objects.create(username=serializer.data['username'])
-        user.set_password(serializer.data['password'])
-        user.save()
+    try:
+        serializer = UserSerializer(data=request.data)
         
-        token = Token.objects.create(user=user)
-        
-        return Response({'token': token.key, 'user': serializer.data}, status=status.HTTP_201_CREATED)
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    
+        if serializer.is_valid():
+            user = User.objects.create_user(
+                username=serializer.validated_data['username'],
+                password=serializer.validated_data['password']
+            )
+            
+            # Automatically log in the user after registration
+            login(request._request, user)
+            
+            token, created = Token.objects.get_or_create(user=user)
+            
+            return Response({'token': token.key, 'user': UserSerializer(user).data}, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        user = User.objects.get(username=serializer.validated_data['username'])
+        user.delete()
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
+@csrf_exempt
+@permission_classes([AllowAny])
+def login_view(request):
+    try:
+        username = request.data.get('username')
+        password = request.data.get('password')
+        
+        user = authenticate(username=username, password=password)
+        
+        if user is not None:
+            login(request._request, user)
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({'token': token.key, 'user': UserSerializer(user).data})
+        else:
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
+def logout_view(request):
+    try:
+        # Log out the authenticated user
+        logout(request._request)
+        return Response({'detail': 'Successfully logged out'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
 def upload_images(request):
     # Extract images from the uploaded files
     images = request.data.getlist('images') if 'images' in request.data else None
@@ -93,7 +155,9 @@ def upload_images(request):
 
 
 @api_view(['PUT'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
+@login_required
 def update_annotations(request, pk):
     image = get_object_or_404(Image, pk=pk)
     serializer = ImageSerializer(image, data=request.data, partial=True)
@@ -110,7 +174,9 @@ def update_annotations(request, pk):
 
 
 @api_view(['POST'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
+@login_required
 def add_labels_to_images(request):
     image_ids = request.data.get('img_ids', [])
     
@@ -147,7 +213,9 @@ def add_labels_to_images(request):
 
 
 @api_view(['GET'])
+@csrf_exempt
 @permission_classes([IsAuthenticated])
+@login_required
 # get all images of the user
 def get_all_images(request):
     images = Image.objects.filter(user=request.user)
