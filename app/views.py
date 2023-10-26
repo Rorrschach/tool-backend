@@ -94,12 +94,62 @@ def upload_images(request):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def update_image(request, pk):
+def update_annotations(request, pk):
     image = get_object_or_404(Image, pk=pk)
     serializer = ImageSerializer(image, data=request.data, partial=True)
+    
+    if image.user != request.user:
+        return Response({"detail": "You do not have permission to perform this action."}, status=status.HTTP_403_FORBIDDEN)
     
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_labels_to_images(request):
+    image_ids = request.data.get('img_ids', [])
+    
+    if not image_ids:
+        return Response({"detail": "No image IDs provided"}, status=status.HTTP_400_BAD_REQUEST)
+    
+    label_text = request.data.get('labels', '')
+
+    responses = []
+    
+    # Retrieve the existing label or create a new one
+    label, created = Label.objects.get_or_create(text=label_text)
+    
+    for image_id in image_ids:
+        try:
+            image = Image.objects.get(id=image_id)
+        except Image.DoesNotExist:
+            responses.append({"detail": f"Image with ID {image_id} does not exist."})
+            continue
+
+        if image.user != request.user:
+            responses.append({"detail": f"You do not have permission to modify image {image_id}."})
+            continue
+
+        # Link the existing label to the image
+        image.labels = label
+        image.save()
+
+        # Serialize the image data
+        serializer = ImageSerializer(image)
+        responses.append(serializer.data)
+    
+    return Response(responses, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+# get all images of the user
+def get_all_images(request):
+    images = Image.objects.filter(user=request.user)
+    serializer = ImageSerializer(images, many=True)
+    return Response(serializer.data)
