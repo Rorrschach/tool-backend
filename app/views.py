@@ -12,45 +12,12 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 # from django.core.handlers.wsgi import WSGIRequest
-
+import logging
 import os
-
-
-
-# @api_view(['POST'])
-# def login(request):
-#     username = request.data.get('username')
-#     password = request.data.get('password')
-    
-#     if username is None or password is None:
-#         return Response({'error': 'Please provide both username and password'},
-#                         status=status.HTTP_400_BAD_REQUEST)
-    
-#     user = get_object_or_404(User, username=username)
-    
-#     if user.check_password(password):
-#         token = Token.objects.get(user=user)
-#         return Response({'token': token.key, 'user': UserSerializer(user).data})
-#     else:
-#         return Response({'error': 'Wrong password'}, status=status.HTTP_400_BAD_REQUEST)
     
 
-# @api_view(['POST'])
-# def register(request):
-    
-#     serializer = UserSerializer(data=request.data)
-    
-#     if serializer.is_valid():
-#         user = User.objects.create(username=serializer.data['username'])
-#         user.set_password(serializer.data['password'])
-#         user.save()
-        
-#         token = Token.objects.create(user=user)
-        
-#         return Response({'token': token.key, 'user': serializer.data}, status=status.HTTP_201_CREATED)
-#     else:
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+logger = logging.getLogger(__name__)
+
 
 @api_view(['POST'])
 @csrf_exempt
@@ -62,7 +29,8 @@ def register(request):
         if serializer.is_valid():
             user = User.objects.create_user(
                 username=serializer.validated_data['username'],
-                password=serializer.validated_data['password']
+                password=serializer.validated_data['password'],
+                email=serializer.validated_data['email']
             )
             
             # Automatically log in the user after registration
@@ -152,7 +120,17 @@ def upload_images(request):
             serializer.save()
             # Create or update the Label instance for the uploaded image
             image = serializer.instance  # Get the created Image instance
-            label, created = Label.objects.get_or_create(image=image, defaults={'text': labels_text})
+            if labels_text:
+                label, created = Label.objects.update_or_create(
+                    image=image,
+                    defaults={'text': labels_text}
+                )
+                if not created:
+                    label.text = labels_text
+                    label.save()
+            
+            # Serialize the image data
+            serializer = ImageSerializer(image)
             responses.append(serializer.data)
         else:
             responses.append(serializer.errors)
@@ -166,7 +144,7 @@ def upload_images(request):
 @login_required
 @csrf_exempt
 def update_annotations(request, pk):
-    print(request.data, pk)
+    print('HELOOOOOOOOOOOOOOOOOOOOOOOOO')
     image = get_object_or_404(Image, pk=pk)
     serializer = ImageSerializer(image, data=request.data, partial=True)
     print(image.user, request.user)
