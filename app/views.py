@@ -145,9 +145,9 @@ def upload_images(request):
         data['user'] = request.user.id  # Use the user's ID instead of username
         data['labels'] = request.data.get('labels', '')
         data['annotations'] = request.data.get('annotations', '')
-        data['image'] = image_file
+        data['url'] = image_file
         serializer = ImageSerializer(data=data)
-        
+                
         if serializer.is_valid():
             serializer.save()
             # Create or update the Label instance for the uploaded image
@@ -161,13 +161,15 @@ def upload_images(request):
 
 
 
-@api_view(['PUT'])
-@csrf_exempt
+@api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 @login_required
+@csrf_exempt
 def update_annotations(request, pk):
+    print(request.data, pk)
     image = get_object_or_404(Image, pk=pk)
     serializer = ImageSerializer(image, data=request.data, partial=True)
+    print(image.user, request.user)
     
     if image.user != request.user:
         return Response({"detail": "You do not have permission to perform this action."}, status=status.HTTP_403_FORBIDDEN)
@@ -180,7 +182,7 @@ def update_annotations(request, pk):
 
 
 
-@api_view(['POST'])
+@api_view(['PATCH'])
 @csrf_exempt
 @permission_classes([IsAuthenticated])
 @login_required

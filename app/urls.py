@@ -9,7 +9,7 @@ urlpatterns = [
     path('logout/', views.logout_view),
     path('register/', views.register),
     path('upload_images/', views.upload_images),
-    path('update_image/<int:pk>/', views.update_annotations),
+    path('update_annotations/<int:pk>/', views.update_annotations),
     path('add_labels', views.add_labels_to_images),
     path('images/getAll/', views.get_all_images)
 ]
