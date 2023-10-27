@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth import authenticate, login, logout
 from .serializers import UserSerializer, ImageSerializer, LabelSerializer
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
+# from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.authtoken.models import Token
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
@@ -11,6 +11,7 @@ from .models import Image, Label
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
+# from django.core.handlers.wsgi import WSGIRequest
 
 import os
 
@@ -65,7 +66,7 @@ def register(request):
             )
             
             # Automatically log in the user after registration
-            login(request._request, user)
+            login(request, user)
             
             token, created = Token.objects.get_or_create(user=user)
             
@@ -88,13 +89,15 @@ def login_view(request):
         user = authenticate(username=username, password=password)
         
         if user is not None:
-            login(request._request, user)
+            login(request, user)
             token, created = Token.objects.get_or_create(user=user)
             return Response({'token': token.key, 'user': UserSerializer(user).data})
         else:
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
 
 @api_view(['POST'])
 @csrf_exempt
@@ -103,6 +106,10 @@ def logout_view(request):
     try:
         # Log out the authenticated user
         logout(request._request)
+        
+         # Delete the Token to invalidate it
+        Token.objects.filter(user=request.user).delete()
+
         return Response({'detail': 'Successfully logged out'}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -221,3 +228,4 @@ def get_all_images(request):
     images = Image.objects.filter(user=request.user)
     serializer = ImageSerializer(images, many=True)
     return Response(serializer.data)
+

@@ -2,8 +2,8 @@ POST http://localhost:8000/login/
 Content-Type: application/json
     
     {
-        "username": "admin",
-        "password": "admin"
+        "username": "ham",
+        "password": "ham"
     }
 
 ###
@@ -20,7 +20,7 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:8000/test/
+GET http://localhost:8000/logout/
 Content-Type: application/json
 {}
 
