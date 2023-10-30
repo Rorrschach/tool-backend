@@ -2,15 +2,18 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Image, Label
 
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id','email', 'username','password']
-        
+        fields = ['id', 'email', 'username', 'password']
+
+
 class LabelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Label
         fields = ['text']
+
 
 class ImageSerializer(serializers.ModelSerializer):
     labels = LabelSerializer(read_only=True)
@@ -19,4 +22,4 @@ class ImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Image
-        fields = ['id','user', 'name', 'annotations', 'labels','url']
+        fields = ['id', 'user', 'name', 'annotations', 'labels', 'url']

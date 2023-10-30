@@ -104,12 +104,17 @@ def upload_images(request):
         image_name = image_file.name
         # Extract labels from the request
         labels_text = request.data.get('labels', '')  # If 'labels' is not in request, default to an empty string
+        # Check if labels_text is a file
+        if hasattr(labels_text, 'read'):
+            # If it's a file, read the content
+            labels_text = labels_text.read().decode('utf-8')
+
         # Add the image name to the request data
         data = request.data.dict()
         data['name'] = image_name
         # Add the user to the request data
         data['user'] = request.user.id  # Use the user's ID instead of username
-        data['labels'] = request.data.get('labels', '')
+        data['labels'] = labels_text
         data['annotations'] = request.data.get('annotations', '')
         data['url'] = image_file
         serializer = ImageSerializer(data=data)
@@ -120,12 +125,16 @@ def upload_images(request):
             image = serializer.instance  # Get the created Image instance
             if labels_text:
                 label, created = Label.objects.update_or_create(
-                    image=image,
-                    defaults={'text': labels_text}
+                    text=labels_text,
+                    defaults={'image': image}
                 )
                 if not created:
-                    label.text = labels_text
+                    label.image = image
                     label.save()
+
+                # Update the image to associate it with the new label
+                image.labels = label
+                image.save()
 
             # Serialize the image data
             serializer = ImageSerializer(image)
@@ -203,4 +212,18 @@ def add_labels_to_images(request):
 def get_all_images(request):
     images = Image.objects.filter(user=request.user)
     serializer = ImageSerializer(images, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
+# get image by id
+def get_image_by_id(request, pk):
+    image = get_object_or_404(Image, pk=pk)
+    if image.user != request.user:
+        return Response({"detail": "You do not have permission to perform this action."},
+                        status=status.HTTP_403_FORBIDDEN)
+    serializer = ImageSerializer(image)
     return Response(serializer.data)

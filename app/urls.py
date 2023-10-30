@@ -11,7 +11,8 @@ urlpatterns = [
     path('images/upload/', views.upload_images),
     path('images/updateAnnotations/<int:pk>/', views.update_annotations),
     path('images/addLabels/', views.add_labels_to_images),
-    path('images/getAll/', views.get_all_images)
+    path('images/getAll/', views.get_all_images),
+    path('images/get/<int:pk>/', views.get_image_by_id),
 ]
 
 if settings.DEBUG:
