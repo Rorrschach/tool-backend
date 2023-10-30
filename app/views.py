@@ -14,7 +14,6 @@ from django.contrib.auth.decorators import login_required
 # from django.core.handlers.wsgi import WSGIRequest
 import logging
 import os
-    
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +24,19 @@ logger = logging.getLogger(__name__)
 def register(request):
     try:
         serializer = UserSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             user = User.objects.create_user(
                 username=serializer.validated_data['username'],
                 password=serializer.validated_data['password'],
                 email=serializer.validated_data['email']
             )
-            
+
             # Automatically log in the user after registration
             login(request, user)
-            
+
             token, created = Token.objects.get_or_create(user=user)
-            
+
             return Response({'token': token.key, 'user': UserSerializer(user).data}, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -46,6 +45,7 @@ def register(request):
         user.delete()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(['POST'])
 @csrf_exempt
 @permission_classes([AllowAny])
@@ -53,9 +53,9 @@ def login_view(request):
     try:
         username = request.data.get('username')
         password = request.data.get('password')
-        
+
         user = authenticate(username=username, password=password)
-        
+
         if user is not None:
             login(request, user)
             token, created = Token.objects.get_or_create(user=user)
@@ -64,8 +64,7 @@ def login_view(request):
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    
+
 
 @api_view(['POST'])
 @csrf_exempt
@@ -74,8 +73,8 @@ def logout_view(request):
     try:
         # Log out the authenticated user
         logout(request._request)
-        
-         # Delete the Token to invalidate it
+
+        # Delete the Token to invalidate it
         Token.objects.filter(user=request.user).delete()
 
         return Response({'detail': 'Successfully logged out'}, status=status.HTTP_200_OK)
@@ -93,14 +92,13 @@ def upload_images(request):
 
     if not images:
         return Response({"detail": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     responses = []
-    
+
     for image_file in images:
         if not image_file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
             responses.append({"detail": f"Invalid file type: {image_file.name}. Please upload an image file."})
             continue
-        
 
         # Extract image name from the uploaded file
         image_name = image_file.name
@@ -115,7 +113,7 @@ def upload_images(request):
         data['annotations'] = request.data.get('annotations', '')
         data['url'] = image_file
         serializer = ImageSerializer(data=data)
-                
+
         if serializer.is_valid():
             serializer.save()
             # Create or update the Label instance for the uploaded image
@@ -128,15 +126,14 @@ def upload_images(request):
                 if not created:
                     label.text = labels_text
                     label.save()
-            
+
             # Serialize the image data
             serializer = ImageSerializer(image)
             responses.append(serializer.data)
         else:
             responses.append(serializer.errors)
-   
-    return Response(responses, status=status.HTTP_201_CREATED)
 
+    return Response(responses, status=status.HTTP_201_CREATED)
 
 
 @api_view(['PATCH'])
@@ -144,20 +141,19 @@ def upload_images(request):
 @login_required
 @csrf_exempt
 def update_annotations(request, pk):
-    print('HELOOOOOOOOOOOOOOOOOOOOOOOOO')
     image = get_object_or_404(Image, pk=pk)
     serializer = ImageSerializer(image, data=request.data, partial=True)
-    print(image.user, request.user)
-    
+    # print(image.user, request.user)
+
     if image.user != request.user:
-        return Response({"detail": "You do not have permission to perform this action."}, status=status.HTTP_403_FORBIDDEN)
-    
+        return Response({"detail": "You do not have permission to perform this action."},
+                        status=status.HTTP_403_FORBIDDEN)
+
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['PATCH'])
@@ -166,17 +162,17 @@ def update_annotations(request, pk):
 @login_required
 def add_labels_to_images(request):
     image_ids = request.data.get('img_ids', [])
-    
+
     if not image_ids:
         return Response({"detail": "No image IDs provided"}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     label_text = request.data.get('labels', '')
 
     responses = []
-    
+
     # Retrieve the existing label or create a new one
     label, created = Label.objects.get_or_create(text=label_text)
-    
+
     for image_id in image_ids:
         try:
             image = Image.objects.get(id=image_id)
@@ -195,7 +191,7 @@ def add_labels_to_images(request):
         # Serialize the image data
         serializer = ImageSerializer(image)
         responses.append(serializer.data)
-    
+
     return Response(responses, status=status.HTTP_201_CREATED)
 
 
@@ -208,4 +204,3 @@ def get_all_images(request):
     images = Image.objects.filter(user=request.user)
     serializer = ImageSerializer(images, many=True)
     return Response(serializer.data)
-
