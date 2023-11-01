@@ -28,7 +28,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['e644-139-135-42-52.ngrok-free.app',
                  'localhost',
-                 ]
+                 '135.181.6.243']
 
 
 # Application definition
@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'app',
     'rest_framework',
+    'corsheaders',
     'rest_framework.authtoken'
 ]
 
@@ -60,6 +61,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'tool.urls'
@@ -94,7 +96,7 @@ DATABASES = {
         'PASSWORD': os.environ.get('PG_PASS', 'postgres'),
         'HOST': os.environ.get('PG_HOST', 'localhost'),
         'PORT': os.environ.get('PG_PORT', '5432'),
-        
+
     }
 }
 
@@ -146,3 +148,10 @@ MEDIA_URL = '/'
 
 # Define the directory where your media files will be stored
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+]
