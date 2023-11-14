@@ -11,9 +11,14 @@ from .models import Image, Label
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db.utils import IntegrityError
 # from django.core.handlers.wsgi import WSGIRequest
 import logging
 import os
+from django.core.files.images import get_image_dimensions
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +45,12 @@ def register(request):
             return Response({'token': token.key, 'user': UserSerializer(user).data}, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except IntegrityError:
+        return Response({'error': 'Username or email already exists'}, status=status.HTTP_409_CONFLICT)
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
-        user = User.objects.get(username=serializer.validated_data['username'])
-        user.delete()
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -61,9 +68,10 @@ def login_view(request):
             token, created = Token.objects.get_or_create(user=user)
             return Response({'token': token.key, 'user': UserSerializer(user).data})
         else:
-            return Response({'error': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Unauthorized', 'message': 'Incorrect username or password.'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Internal Server Error', 'message': 'The server encountered an unexpected condition which prevented it from fulfilling the request.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['POST'])
@@ -86,6 +94,65 @@ def logout_view(request):
 @csrf_exempt
 @permission_classes([IsAuthenticated])
 @login_required
+# def upload_images(request):
+#     # Extract images from the uploaded files
+#     images = request.data.getlist('images') if 'images' in request.data else None
+
+#     if not images:
+#         return Response({"detail": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+#     responses = []
+
+#     for image_file in images:
+#         if not image_file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
+#             responses.append({"detail": f"Invalid file type: {image_file.name}. Please upload an image file."})
+#             continue
+
+#         # Extract image name from the uploaded file
+#         image_name = image_file.name
+#         # Extract labels from the request
+#         labels_text = request.data.get('labels', '')  # If 'labels' is not in request, default to an empty string
+#         # Check if labels_text is a file
+#         if hasattr(labels_text, 'read'):
+#             # If it's a file, read the content
+#             labels_text = labels_text.read().decode('utf-8')
+
+#         # Add the image name to the request data
+#         data = request.data.dict()
+#         data['name'] = image_name
+#         # Add the user to the request data
+#         data['user'] = request.user.id  # Use the user's ID instead of username
+#         data['labels'] = labels_text
+#         data['annotations'] = request.data.get('annotations', '')
+#         data['url'] = image_file
+#         serializer = ImageSerializer(data=data)
+
+#         if serializer.is_valid():
+#             serializer.save()
+#             # Create or update the Label instance for the uploaded image
+#             image = serializer.instance  # Get the created Image instance
+#             if labels_text:
+#                 label, created = Label.objects.update_or_create(
+#                     text=labels_text,
+#                     defaults={'image': image}
+#                 )
+#                 if not created:
+#                     label.image = image
+#                     label.save()
+
+#                 # Update the image to associate it with the new label
+#                 image.labels = label
+#                 image.save()
+
+#             # Serialize the image data
+#             serializer = ImageSerializer(image)
+#             responses.append(serializer.data)
+#         else:
+#             responses.append(serializer.errors)
+
+#     return Response(responses, status=status.HTTP_201_CREATED)
+
+
 def upload_images(request):
     # Extract images from the uploaded files
     images = request.data.getlist('images') if 'images' in request.data else None
@@ -109,6 +176,9 @@ def upload_images(request):
             # If it's a file, read the content
             labels_text = labels_text.read().decode('utf-8')
 
+        # Open the image file with PIL and get its size
+        width, height = get_image_dimensions(image_file)
+
         # Add the image name to the request data
         data = request.data.dict()
         data['name'] = image_name
@@ -117,6 +187,8 @@ def upload_images(request):
         data['labels'] = labels_text
         data['annotations'] = request.data.get('annotations', '')
         data['url'] = image_file
+        data['width'] = width  # Add the width to the request data
+        data['height'] = height  # Add the height to the request data
         serializer = ImageSerializer(data=data)
 
         if serializer.is_valid():
@@ -141,6 +213,7 @@ def upload_images(request):
             responses.append(serializer.data)
         else:
             responses.append(serializer.errors)
+            print(serializer.errors)
 
     return Response(responses, status=status.HTTP_201_CREATED)
 

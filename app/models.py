@@ -15,6 +15,8 @@ class Image(models.Model):
     annotations = models.TextField(null=True, blank=True)
     labels = models.ForeignKey(Label, on_delete=models.CASCADE, null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    width = models.PositiveIntegerField(null=True, blank=True)  # New field for width
+    height = models.PositiveIntegerField(null=True, blank=True)  # New field for height
 
     def __str__(self):
         return self.name

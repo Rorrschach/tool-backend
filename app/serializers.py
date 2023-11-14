@@ -14,12 +14,13 @@ class LabelSerializer(serializers.ModelSerializer):
         model = Label
         fields = ['text']
 
-
 class ImageSerializer(serializers.ModelSerializer):
     labels = LabelSerializer(read_only=True)
     user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())  # Allow all User instances
     url = serializers.ImageField(max_length=None, use_url=True)
+    width = serializers.IntegerField()  # New field for width
+    height = serializers.IntegerField()  # New field for height
 
     class Meta:
         model = Image
-        fields = ['id', 'user', 'name', 'annotations', 'labels', 'url']
+        fields = ['id', 'user', 'name', 'annotations', 'labels', 'url', 'width', 'height']  # Include new fields
