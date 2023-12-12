@@ -20,3 +20,11 @@ class Image(models.Model):
 
     def __str__(self):
         return self.name
+
+class NLP_data(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255) # name of the pdf
+    data = models.TextField(null=True, blank=True) # the data of the pdf
+    
+    def __str__(self):
+        return self.name

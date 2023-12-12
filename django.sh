@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Create migrations"
-python manage.py makemigrations app
+python manage.py makemigrations
 echo "****************************************"
 
 echo "Migrate"

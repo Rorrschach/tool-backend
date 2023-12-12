@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Image, Label
+from .models import Image, Label, NLP_data
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -24,3 +24,9 @@ class ImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Image
         fields = ['id', 'user', 'name', 'annotations', 'labels', 'url', 'width', 'height']  # Include new fields
+
+
+class NLP_dataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NLP_data
+        fields = ['id','user', 'name', 'data']

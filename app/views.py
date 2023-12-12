@@ -1,24 +1,32 @@
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
-from django.contrib.auth import authenticate, login, logout
-from .serializers import UserSerializer, ImageSerializer, LabelSerializer
-from rest_framework import status
-# from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.authtoken.models import Token
-from django.contrib.auth.models import User
-from django.shortcuts import get_object_or_404
-from .models import Image, Label
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
-from django.db.utils import IntegrityError
 # from django.core.handlers.wsgi import WSGIRequest
 import logging
 import os
+import tempfile
+import zipfile
+from collections import defaultdict
+from io import BytesIO
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.db.utils import IntegrityError
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from pdf2image import convert_from_path
+from rest_framework import status
+# from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
 
-
+from .models import Label, Image, NLP_data
+from .serializers import ImageSerializer, NLP_dataSerializer
+from .serializers import UserSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -94,65 +102,6 @@ def logout_view(request):
 @csrf_exempt
 @permission_classes([IsAuthenticated])
 @login_required
-# def upload_images(request):
-#     # Extract images from the uploaded files
-#     images = request.data.getlist('images') if 'images' in request.data else None
-
-#     if not images:
-#         return Response({"detail": "No images provided"}, status=status.HTTP_400_BAD_REQUEST)
-
-#     responses = []
-
-#     for image_file in images:
-#         if not image_file.name.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif')):
-#             responses.append({"detail": f"Invalid file type: {image_file.name}. Please upload an image file."})
-#             continue
-
-#         # Extract image name from the uploaded file
-#         image_name = image_file.name
-#         # Extract labels from the request
-#         labels_text = request.data.get('labels', '')  # If 'labels' is not in request, default to an empty string
-#         # Check if labels_text is a file
-#         if hasattr(labels_text, 'read'):
-#             # If it's a file, read the content
-#             labels_text = labels_text.read().decode('utf-8')
-
-#         # Add the image name to the request data
-#         data = request.data.dict()
-#         data['name'] = image_name
-#         # Add the user to the request data
-#         data['user'] = request.user.id  # Use the user's ID instead of username
-#         data['labels'] = labels_text
-#         data['annotations'] = request.data.get('annotations', '')
-#         data['url'] = image_file
-#         serializer = ImageSerializer(data=data)
-
-#         if serializer.is_valid():
-#             serializer.save()
-#             # Create or update the Label instance for the uploaded image
-#             image = serializer.instance  # Get the created Image instance
-#             if labels_text:
-#                 label, created = Label.objects.update_or_create(
-#                     text=labels_text,
-#                     defaults={'image': image}
-#                 )
-#                 if not created:
-#                     label.image = image
-#                     label.save()
-
-#                 # Update the image to associate it with the new label
-#                 image.labels = label
-#                 image.save()
-
-#             # Serialize the image data
-#             serializer = ImageSerializer(image)
-#             responses.append(serializer.data)
-#         else:
-#             responses.append(serializer.errors)
-
-#     return Response(responses, status=status.HTTP_201_CREATED)
-
-
 def upload_images(request):
     # Extract images from the uploaded files
     images = request.data.getlist('images') if 'images' in request.data else None
@@ -216,6 +165,99 @@ def upload_images(request):
             print(serializer.errors)
 
     return Response(responses, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
+
+def upload_pdfs(request):
+    # Extract PDFs from the uploaded files
+    pdfs = request.data.getlist('pdfs') if 'pdfs' in request.data else None
+
+    if not pdfs:
+        return Response({"detail": "No PDFs provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    responses = []
+
+    for pdf_file in pdfs:
+        if not pdf_file.name.lower().endswith('.pdf'):
+            responses.append({"detail": f"Invalid file type: {pdf_file.name}. Please upload a PDF file."})
+            continue
+
+        # Save the PDF in MEDIA_ROOT in folder called pdfs
+        pdf_path = os.path.join(settings.MEDIA_ROOT, pdf_file.name)
+        with open(pdf_path, 'wb+') as destination:
+            for chunk in pdf_file.chunks():
+                destination.write(chunk)
+
+        # Convert the PDF to images
+        images = convert_from_path(pdf_path)
+        
+        for i, image in enumerate(images, start=1):
+            # Convert the image to bytes
+            image_bytes = BytesIO()
+            image.save(image_bytes, format='JPEG')
+            # Get the size of the file
+            file_size = image_bytes.tell()
+            # Rewind the file pointer to the start
+            image_bytes.seek(0)
+            image_name = f"{os.path.splitext(pdf_file.name)[0]}_{i}.jpeg"
+            image_file = InMemoryUploadedFile(image_bytes, None, image_name, 'image/jpeg', file_size, None)
+
+
+            # Extract image name from the uploaded file
+            image_name = image_file.name
+            # Extract labels from the request
+            labels_text = request.data.get('labels', '')  # If 'labels' is not in request, default to an empty string
+            # Check if labels_text is a file
+            if hasattr(labels_text, 'read'):
+                # If it's a file, read the content
+                labels_text = labels_text.read().decode('utf-8')
+                
+            # Open the image file with PIL and get its size
+            width, height = get_image_dimensions(image_file)
+            
+            # Add the image name to the request data
+            data = request.data.dict()
+            data['name'] = image_name
+            # Add the user to the request data
+            data['user'] = request.user.id
+            data['labels'] = labels_text
+            data['annotations'] = request.data.get('annotations', '')
+            data['url'] = image_file
+            data['width'] = width
+            data['height'] = height
+            serializer = ImageSerializer(data=data)
+            
+            if serializer.is_valid():
+                serializer.save()
+                # Create or update the Label instance for the uploaded image
+                image = serializer.instance
+                if labels_text:
+                    label, created = Label.objects.update_or_create(
+                        text=labels_text,
+                        defaults={'image': image}
+                    )
+                    if not created:
+                        label.image = image
+                        label.save()
+                        
+                    # Update the image to associate it with the new label
+                    image.labels = label
+                    image.save()
+                    
+                # Serialize the image data
+                serializer = ImageSerializer(image)
+                responses.append(serializer.data)
+            else:
+                
+                responses.append(serializer.errors)
+                print(serializer.errors)
+                
+    return Response(responses, status=status.HTTP_201_CREATED)
+
 
 
 @api_view(['PATCH'])
@@ -300,3 +342,90 @@ def get_image_by_id(request, pk):
                         status=status.HTTP_403_FORBIDDEN)
     serializer = ImageSerializer(image)
     return Response(serializer.data)
+
+
+
+
+@api_view(['GET'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
+def get_all_images_annotations(request):
+    # Get all images of the user
+    images = Image.objects.filter(user=request.user)
+    serializer = ImageSerializer(images, many=True)
+
+    # Create a temporary directory to store the .txt files
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Keep track of duplicate image names
+        image_names = defaultdict(int)
+
+        # For each image, save its annotations in a .txt file
+        for image in serializer.data:
+            annotations = image['annotations']
+            # Only process images that have annotations
+            if annotations:
+                # Remove the square brackets and quotes from the annotations
+                annotations = annotations.replace('[', '').replace(']', '').replace('"', '')
+                # Write each annotation on a new line
+                image_name = image['name'].split('.')[0]
+                image_names[image_name] += 1
+                if image_names[image_name] > 1:
+                    image_name = f"{image_name}({image_names[image_name]-1})"
+                with open(os.path.join(tmpdirname, f"{image_name}.txt"), 'w') as f:
+                    f.write('\n'.join(annotations.split(',')))
+
+        # Create a zip file and add all the .txt files to it
+        with zipfile.ZipFile(os.path.join(tmpdirname, 'annotations.zip'), 'w') as zipf:
+            for file in os.listdir(tmpdirname):
+                if file.endswith(".txt"):
+                    zipf.write(os.path.join(tmpdirname, file), arcname=file)
+
+        # Send the zip file to the frontend
+        response = FileResponse(open(os.path.join(tmpdirname, 'annotations.zip'), 'rb'))
+        response['Content-Disposition'] = 'attachment; filename=annotations.zip'
+        return response
+    
+    
+@api_view(['POST'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
+
+def upload_nlp_data(request):
+    # Extract images from the uploaded files
+    data = request.data.get('data') if 'data' in request.data else None
+
+    if not data:
+        return Response({"detail": "No data provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    responses = []
+
+    # Add the image name to the request data
+    data = request.data
+    # Add the user to the request data
+    data['user'] = request.user.id  # Use the user's ID instead of username
+    
+    serializer = NLP_dataSerializer(data=data)
+    
+    if serializer.is_valid():
+        instance = serializer.save()
+        # Serialize the instance data
+        serializer = NLP_dataSerializer(instance)
+        responses.append(serializer.data)
+    else:
+        responses.append(serializer.errors)
+        print(serializer.errors)
+        
+    return Response(responses, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@csrf_exempt
+@permission_classes([IsAuthenticated])
+@login_required
+
+def get_all_nlp_data(request):
+    data = NLP_data.objects.filter(user=request.user)
+    serializer = NLP_dataSerializer(data, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)

@@ -13,6 +13,9 @@ urlpatterns = [
     path('images/addLabels/', views.add_labels_to_images),
     path('images/getAll/', views.get_all_images),
     path('images/get/<int:pk>/', views.get_image_by_id),
+    path('pdfs/upload/', views.upload_pdfs),
+    path('nlp/upload/', views.upload_nlp_data),
+    path('nlp/getAll/', views.get_all_nlp_data),
 ]
 
 if settings.DEBUG:
